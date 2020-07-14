@@ -45,19 +45,11 @@ def compute_birdviewbox(line, shape, scale):
 
     return np.vstack((corners_2D, corners_2D[0,:]))
 
-def draw_birdeyes(ax2, line_gt, line_p, shape):
+def draw_birdeyes(ax2, line_p, shape):
     # shape = 900
     scale = 15
 
     pred_corners_2d = compute_birdviewbox(line_p, shape, scale)
-    gt_corners_2d = compute_birdviewbox(line_gt, shape, scale)
-
-    codes = [Path.LINETO] * gt_corners_2d.shape[0]
-    codes[0] = Path.MOVETO
-    codes[-1] = Path.CLOSEPOLY
-    pth = Path(gt_corners_2d, codes)
-    p = patches.PathPatch(pth, fill=False, color='orange', label='ground truth')
-    ax2.add_patch(p)
 
     codes = [Path.LINETO] * pred_corners_2d.shape[0]
     codes[0] = Path.MOVETO
@@ -67,6 +59,7 @@ def draw_birdeyes(ax2, line_gt, line_p, shape):
     ax2.add_patch(p)
 
 def compute_3Dbox(P2, line):
+    print(line)
     obj = detectionInfo(line)
     # Draw 2D Bounding Box
     xmin = int(obj.xmin)
@@ -125,18 +118,17 @@ def draw_3Dbox(ax, P2, line, color):
     ax.add_patch(p)
     ax.add_patch(front_fill)
 
-def visualization(args, image_path, label_path, calib_path, pred_path,
+def visualization(args, image_path, calib_path, pred_path,
                   dataset, VEHICLES):
 
     for index in range(start_frame, end_frame):
         image_file = os.path.join(image_path, dataset[index]+ '.png')
-        label_file = os.path.join(label_path, dataset[index] + '.txt')
         prediction_file = os.path.join(pred_path, dataset[index]+ '.txt')
         calibration_file = os.path.join(calib_path, dataset[index] + '.txt')
         for line in open(calibration_file):
             if 'P2' in line:
                 P2 = line.split(' ')
-                P2 = np.asarray([float(i) for i in P2[1:]])
+                P2 = np.asarray([float(i) for i in P2[1:] if i.strip()])
                 P2 = np.reshape(P2, (3, 4))
 
 
@@ -154,24 +146,22 @@ def visualization(args, image_path, label_path, calib_path, pred_path,
         shape = 900
         birdimage = np.zeros((shape, shape, 3), np.uint8)
 
-        with open(label_file) as f1, open(prediction_file) as f2:
-            for line_gt, line_p in zip(f1, f2):
-                line_gt = line_gt.strip().split(' ')
+        with open(prediction_file) as f2:
+            for line_p in f2:
                 line_p = line_p.strip().split(' ')
 
                 truncated = np.abs(float(line_p[1]))
                 occluded = np.abs(float(line_p[2]))
-                trunc_level = 1 if args.a == 'training' else 255
-
-            # truncated object in dataset is not observable
-                if line_p[0] in VEHICLES  and truncated < trunc_level:
+                trunc_level = 255
+                print(truncated, occluded)
+                if line_p[0] in VEHICLES :
                     color = 'green'
                     if line_p[0] == 'Cyclist':
                         color = 'yellow'
                     elif line_p[0] == 'Pedestrian':
                         color = 'cyan'
                     draw_3Dbox(ax, P2, line_p, color)
-                    draw_birdeyes(ax2, line_gt, line_p, shape)
+                    draw_birdeyes(ax2, line_p, shape)
 
         # visualize 3D bounding box
         ax.imshow(image)
@@ -189,45 +179,33 @@ def visualization(args, image_path, label_path, calib_path, pred_path,
         ax2.imshow(birdimage, origin='lower')
         ax2.set_xticks([])
         ax2.set_yticks([])
-        # add legend
-        handles, labels = ax2.get_legend_handles_labels()
-        legend = ax2.legend([handles[0], handles[1]], [labels[0], labels[1]], loc='lower right',
-                            fontsize='x-small', framealpha=0.2)
-        for text in legend.get_texts():
-            plt.setp(text, color='w')
 
         print(dataset[index])
         if args.save == False:
             plt.show()
         else:
             fig.savefig(os.path.join(args.path, dataset[index]), dpi=fig.dpi, bbox_inches='tight', pad_inches=0)
-        # video_writer.write(np.uint8(fig))
 
 def main(args):
-    base_dir = '/media/user/新加卷/kitti_dateset/'
-    dir = ReadDir(base_dir=base_dir, subset=args.a,
-                  tracklet_date='2011_09_26', tracklet_file='2011_09_26_drive_0093_sync')
-    label_path = dir.label_dir
-    image_path = dir.image_dir
-    calib_path = dir.calib_dir
-    pred_path = dir.prediction_dir
+    image_path = "/Users/mo/code/computer-vision/SMOKE/kitti/testing/image_2"
+    calib_path = "/Users/mo/code/computer-vision/SMOKE/kitti/testing/calib"
+    pred_path = "/Users/mo/code/computer-vision/SMOKE/output/data"
 
     dataset = [name.split('.')[0] for name in sorted(os.listdir(image_path))]
 
     VEHICLES = cfg().KITTI_cat
 
-    visualization(args, image_path, label_path, calib_path, pred_path,
-                  dataset, VEHICLES)
+    visualization(args, image_path, calib_path, pred_path, dataset, VEHICLES)
 
 if __name__ == '__main__':
     start_frame = 0
-    end_frame = 432
+    end_frame = 1000
 
     parser = argparse.ArgumentParser(description='Visualize 3D bounding box on images',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-a', '-dataset', type=str, default='tracklet', help='training dataset or tracklet')
     parser.add_argument('-s', '--save', type=bool, default=True, help='Save Figure or not')
-    parser.add_argument('-p', '--path', type=str, default='../result_mobilenet_0093', help='Output Image folder')
+    parser.add_argument('-p', '--path', type=str, default='/Users/mo/code/computer-vision/SMOKE/output/viz', help='Output Image folder')
     args = parser.parse_args()
 
     if not os.path.exists(args.path):
